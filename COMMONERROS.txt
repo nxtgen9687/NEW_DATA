@@ -1,0 +1,72 @@
+Here are the most common and problematic syntax errors in Weintek macros, based on typical user issues.
+1. Incorrect Assignment Operator
+
+    Error: Using == (comparison) instead of = (assignment).
+
+    Cause: Confusing the equality check with the assignment operator.
+
+    Incorrect: bool AckAll == 1
+
+    Correct: bool AckAll = 1 
+
+2. Variable Declaration After Code
+
+    Error: Declaring a variable after the first executable line in a function.
+
+    Cause: The pYsdocode compiler requires all local variables to be declared at the very beginning of a macro_command.
+
+    Incorrect:
+
+    macro_command main()
+        GetData(value, "Driver", 4x, 100, 1)
+        short value // Declaration after code
+    end macro_command
+     
+
+    Correct:
+
+    macro_command main()
+        short value // Declaration at the start
+        GetData(value, "Driver", 4x, 100, 1)
+    end macro_command
+     
+
+3. Mismatched Data Types in GetData/SetData
+
+    Error: Passing a variable of the wrong data type to GetData or SetData.
+
+    Cause: For example, using a float variable to read from an integer-type PLC address without proper conversion.
+
+    Solution: Ensure the variable type matches the data type of the target address, or use a float tag in the HMI project if the display object is set to FLOAT. 
+
+4. Incorrect Driver or Address Syntax
+
+    Error: GetData or SetData functions fail silently or return incorrect data.
+
+    Cause: Using the wrong driver name (e.g., "MODBUS RTU" vs "MODBUS TCP/IP") or an incorrect address type prefix (e.g., 4x for holding registers, 0x for coils).
+
+    Solution: Double-check the driver name in the project and the correct address mapping for the specific PLC protocol. 
+
+5. Infinite Loops Without DELAY
+
+    Error: The HMI screen becomes unresponsive or freezes.
+
+    Cause: A while or for loop runs continuously without a DELAY() function, consuming all processing time and preventing the HMI from updating.
+
+    Solution: Always include a DELAY(10) or similar inside any loop that is not intended to be extremely fast. 
+
+6. Unclosed Brackets or Parentheses
+
+    Error: Compile-time "Syntax Error".
+
+    Cause: A missing ), }, or ] prevents the compiler from parsing the code structure correctly.
+
+    Solution: Carefully check the matching of all opening and closing brackets, especially in complex if statements or function calls. 
+
+7. Trigger Not Configured
+
+    Error: The macro does not execute when expected.
+
+    Cause: The macro's "Execution Type" is not set (e.g., to "Cyclic", "Bit ON", or "Screen Open").
+
+    Solution: In the macro editor, configure the Execution Type and its associated conditions. 

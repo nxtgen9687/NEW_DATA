@@ -1,0 +1,381 @@
+// Global buffer array and variables
+char rlb[1024]         // Readline buffer
+short rlb_i            // Buffer index
+short rlb_size         // Current buffer size
+
+sub bool readline(char terminator)
+    bool end_condition = false
+    char line[128]
+    short line_size = 0
+    FILL(line, 0, 128)
+
+    while end_condition == false
+        short rlb_size_local
+        // Refill buffer if empty or exhausted
+        if rlb_i >= rlb_size or rlb_size == 0 then
+            char rlb_local[256]
+            short rlb_i_local
+            INPORT2(rlb_local, "Free Protocol", rlb_size_local, 20)
+            // Copy received data to global buffer
+            for rlb_i_local = 0 to rlb_size_local
+                rlb[rlb_i_local] = rlb_local[rlb_i_local]
+            next rlb_i_local
+            rlb_i = 0
+            rlb_size = rlb_size_local
+            continue
+        end if
+
+        // Process one character
+        if rlb[rlb_i] == terminator then
+            end_condition = true
+        else
+            line[line_size] = rlb[rlb_i]
+            line_size = line_size + 1
+            if line_size == 128 then
+                end_condition = true
+            end if
+        end if
+        rlb_i = rlb_i + 1
+    wend
+    return true
+end sub
+
+
+
+
+
+
+
+macro_command main()
+    char request[128] = "IS_A_COMMAND"
+    short strlength
+    strlength = StringLength(request)
+    request[strlength] = 0x0D  // Append carriage return
+    OUTPORT(request, "Free Protocol", strlength + 1)
+end macro_command
+
+
+
+
+
+
+
+char buffer[256]
+short bytes_received
+INPORT2(buffer, "Free Protocol", bytes_received, 100)  // Timeout 100ms
+
+
+
+
+
+
+macro_command main()
+    char outputstring[600]
+    char header[] = "^XA^CF0,50^FO100,50^FDLamonde^FS^FO100,160^BXN,10,200,,,,,1^FD"
+    char partnumber[24]
+    char fs[] = "^FS"
+    char footer[] = "^XZ"
+    short length
+
+    FILL(outputstring, 0, 600)
+    GetData(partnumber, "Local HMI", LW, 0, 24)
+
+    StringCat(header, outputstring)
+    length = StringLength(header)
+    StringCat(partnumber, outputstring[length])
+    length = length + StringLength(partnumber)
+    StringCat(fs, outputstring[length])
+    length = length + StringLength(fs)
+    StringCat(footer, outputstring[length])
+
+    OUTPORT(outputstring, "Free Protocol", StringLength(outputstring))
+end macro_command
+
+
+
+
+
+
+
+
+
+
+
+
+macro_command main()
+    // Define arrays for 10 recipe steps
+    float Power[10]
+    int Time[10]
+    float Temp[10]
+    short StepType[10]
+    short CurrentStep = 0
+
+    // Read all 10 steps of data from the PLC (MODBUS addresses 40001-40040)
+    GetData(Power, "MODBUS TCP", 4x, 40001, 10)
+    GetData(Time, "MODBUS TCP", 4x, 40011, 10)
+    GetData(Temp, "MODBUS TCP", 4x, 40021, 10)
+    GetData(StepType, "MODBUS TCP", 4x, 40031, 10)
+
+    // Modify the data for the current step (e.g., increase temperature by 5%)
+    GetData(CurrentStep, "Local HMI", LW, 0, 1) // Get current step from HMI
+    if CurrentStep >= 0 and CurrentStep < 10 then
+        Temp[CurrentStep] = Temp[CurrentStep] * 1.05
+        // Write the modified temperature back to the PLC
+        SetData(Temp[CurrentStep], "MODBUS TCP", 4x, 40021 + CurrentStep, 1)
+    end if
+end macro_command
+
+
+
+macro_command main()
+    short StatusWord = 0
+    bool BatteryLow = 0
+    bool CPUError = 0
+    bool OverTemp = 0
+    bool Ready = 0
+
+    // Read the status word from the PLC (e.g., from a status register)
+    GetData(StatusWord, "MODBUS TCP", 4x, 50000, 1)
+
+    // Extract individual bits using GETBIT
+    // Assuming: Bit 0 = Ready, Bit 1 = OverTemp, Bit 2 = CPU Error, Bit 3 = Battery Low
+    GETBIT(StatusWord, Ready, 0)
+    GETBIT(StatusWord, OverTemp, 1)
+    GETBIT(StatusWord, CPUError, 2)
+    GETBIT(StatusWord, BatteryLow, 3)
+
+    // Use the extracted bits for HMI logic
+    if CPUError == 1 then
+        // Trigger an alarm on the HMI
+        SetData(1, "Local HMI", LB, 100, 1)
+    else
+        SetData(0, "Local HMI", LB, 100, 1)
+    end if
+
+    // Display status on HMI
+    SetData(Ready, "Local HMI", LB, 101, 1)
+    SetData(OverTemp, "Local HMI", LB, 102, 1)
+    SetData(BatteryLow, "Local HMI", LB, 103, 1)
+end macro_command
+
+
+
+
+macro_command main()
+    // Clear the receive buffer for the Free Protocol driver
+    PURGE("Free Protocol")
+    // Now safe to send a new command
+    char request[16] = "STATUS?"
+    OUTPORT(request, "Free Protocol", StringLength(request))
+end macro_command
+
+
+macro_command main()
+    short status_word = 0
+    bool bit_state = 0
+    // Read a 16-bit status word from a PLC
+    GetData(status_word, "MODBUS TCP", 4x, 50000, 1)
+    // Extract bit 3 (e.g., an alarm flag)
+    GETBIT(status_word, bit_state, 3)
+    // Use the bit state
+    SetData(bit_state, "Local HMI", LB, 50, 1) // Display on HMI
+end macro_command
+
+
+
+
+
+
+macro_command main()
+    char response[256]
+    short receive_len
+    short wait_time = 50 // milliseconds
+
+    // Read data, returning after wait_time ms if no data arrives
+    INPORT2(response, "Free Protocol", receive_len, wait_time)
+
+    // Process data if received
+    if receive_len >= 1 then
+        // Example: Echo the first character back
+        OUTPORT(response, "Free Protocol", 1)
+    end if
+end macro_command
+
+
+
+
+
+macro_command main()
+    char response[6]
+    short receive_len
+    short wait_time = 100
+
+    // Attempt to read exactly 6 bytes
+    INPORT3(response, "Free Protocol", 6, receive_len, wait_time)
+
+    // Check if the expected amount was received
+    if receive_len >= 6 then
+        SetData(response, "Local HMI", LW, 0, 6) // Store in HMI memory
+    end if
+end macro_command
+
+
+
+macro_command main()
+    char response[128]
+    short receive_len
+    char tail_ascii = 0x0D // Carriage Return (CR)
+
+    // Read data until a Carriage Return is received
+    INPORT4(response, "Free Protocol", receive_len, tail_ascii)
+
+    // Process the received line
+    if receive_len >= 1 then
+        // Example: Check if the response is "OK"
+        if response[0] == 'O' and response[1] == 'K' then
+            SetData(1, "Local HMI", LB, 50, 1) // Set an HMI bit
+        end if
+    end if
+end macro_command
+
+
+macro_command main()
+    // Define arrays for 10 recipe steps
+    float Power[10]
+    int Time[10]
+    float Temp[10]
+    short StepType[10]
+    short CurrentStep = 0
+
+    // Read all 10 steps of data from the PLC over Ethernet IP (MODBUS addresses 40001-40040)
+    GetData(Power, "MODBUS TCP/IP", 4x, 40001, 10)
+    GetData(Time, "MODBUS TCP/IP", 4x, 40011, 10)
+    GetData(Temp, "MODBUS TCP/IP", 4x, 40021, 10)
+    GetData(StepType, "MODBUS TCP/IP", 4x, 40031, 10)
+
+    // Modify the data for the current step (e.g., increase temperature by 5%)
+    GetData(CurrentStep, "Local HMI", LW, 0, 1) // Get current step from HMI
+    if CurrentStep >= 0 and CurrentStep < 10 then
+        Temp[CurrentStep] = Temp[CurrentStep] * 1.05
+        // Write the modified temperature back to the PLC
+        SetData(Temp[CurrentStep], "MODBUS TCP/IP", 4x, 40021 + CurrentStep, 1)
+    end if
+end macro_command
+
+
+Communication Functions
+
+    GetData(): Reads data from a PLC or HMI device.
+
+        GetData(variable, "Driver", Address_Type, Address, Length)
+
+    SetData(): Writes data to a PLC or HMI device.
+
+        SetData(variable, "Driver", Address_Type, Address, Length)
+
+    GetDevice(): Reads the status of a PLC connection.
+
+        GetDevice("Driver") returns 1 for connected, 0 for disconnected.
+
+    OUTPORT(): Sends a string of data via a Free Protocol driver.
+
+        OUTPORT(buffer, "Free Protocol", length)
+
+    INPORT2(): Receives data into a buffer with a timeout.
+
+        INPORT2(buffer, "Free Protocol", bytes_received, timeout_ms)
+
+    INPORT3(): Receives a fixed number of bytes with a timeout.
+
+        INPORT3(buffer, "Free Protocol", expected_bytes, bytes_received, timeout_ms)
+
+    INPORT4(): Receives data until a specified ending character is found.
+
+        INPORT4(buffer, "Free Protocol", bytes_received, ending_char)
+
+    PURGE(): Clears the communication buffer for a driver.
+
+        PURGE("Free Protocol")
+
+Bit Manipulation Functions
+
+    GETBIT(): Reads the state of a specific bit within a word.
+
+        GETBIT(word_variable, bool_variable, bit_number)
+
+    SETBIT(): Sets a specific bit within a word to 1.
+
+        SETBIT(word_variable, bit_number)
+
+    CLRBIT(): Clears a specific bit within a word to 0.
+
+        CLRBIT(word_variable, bit_number)
+
+    NOTBIT(): Toggles (inverts) a specific bit within a word.
+
+        NOTBIT(word_variable, bit_number)
+
+String Functions
+
+    StringCat(): Concatenates two strings.
+
+        StringCat(source_string, destination_string)
+
+    StringLength(): Returns the length of a string.
+
+        StringLength(string_variable)
+
+    StringMid(): Extracts a substring.
+
+        StringMid(string_variable, start_index, length, result_variable)
+
+    StringInsert(): Inserts a string into another string at a specified position.
+
+        StringInsert(insert_string, target_string, position)
+
+    StringDelete(): Deletes a portion of a string.
+
+        StringDelete(string_variable, start_position, length)
+
+Time & System Functions
+
+    GetTime(): Retrieves the current system time.
+
+        GetTime(year, month, day, hour, minute, second)
+
+    SetTime(): Sets the HMI system time.
+
+        SetTime(year, month, day, hour, minute, second)
+
+    Delay(): Pauses macro execution for a specified time in milliseconds.
+
+        Delay(milliseconds)
+
+    Beep(): Triggers the HMI's buzzer.
+
+        Beep(duration_ms)
+
+    ScreenChange(): Changes the active screen.
+
+        ScreenChange(screen_number)
+
+Math & Array Functions
+
+    FILL(): Fills an array with a specified value.
+
+        FILL(array_name, value, length)
+
+    ABS(): Returns the absolute value of a number.
+
+    SQR(): Returns the square root of a number.
+
+    POW(): Raises a number to a specified power.
+
+    RAND(): Generates a random number. 
+
+
+
+
+
+
+
